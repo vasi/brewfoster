@@ -1,0 +1,84 @@
+#!/usr/bin/env ruby
+require 'pathname'
+require 'set'
+require 'pp'
+
+def dependencies
+  deps = {}
+  IO.popen(['brew', 'deps', '--installed']) do |f|
+    f.each do |line|
+      md = /^([^:]+):\s*(.*)$/.match(line) or raise "Can't parse dependencies"
+      deps[md[1]] = md[2].split(' ')
+    end
+  end
+  deps
+end
+
+def reverse_dependencies
+  revs = {}
+  dependencies.each do |pkg, deps|
+    revs[pkg] ||= []
+    deps.each do |dep|
+      revs[dep] ||= []
+      revs[dep] << pkg
+    end
+  end
+  revs
+end
+
+def keepers
+  keepers = Set.new
+  Pathname.new('~/keepers').expand_path.each_child do |f|
+    f.each_line do |line|
+      keepers << line.chomp.sub(/#.*/, '').strip
+    end
+  end
+  keepers
+end
+
+def orphans
+  deps = dependencies
+  seen = Set.new
+  q = keepers.to_a
+  until q.empty? do
+    k = q.shift
+    next unless seen.add?(k)
+    q.concat(deps.delete(k)) if deps.include?(k)
+  end
+  deps.keys
+end
+
+cmd = ARGV.shift
+if cmd == 'orphans'
+  orphans.sort.each { |o| puts o }
+elsif cmd == 'remove'
+  found = orphans
+  system('brew', 'remove', *found) unless found.empty?
+elsif cmd == 'candidates'
+  nodeps = reverse_dependencies.select { |k,v| v.empty? }.keys
+  candidates = Set.new(nodeps) - keepers
+  candidates.sort.each { |c| puts c }
+elsif cmd == 'missing'
+  missing = keepers - dependencies.keys
+  missing.sort.each { |m| puts m }
+elsif cmd.nil? || cmd == 'help'
+  help = <<-eos
+    Usage: brewfoster COMMAND
+
+    Keep a clean brew install, by maintaining a list of desired packages in
+    files inside ~/keepers.
+
+    Commands include:
+
+      orphans: Show packages that can be removed with no effect on keepers
+
+      remove: Remove all orphan packages
+
+      candidates: Show packages you might want to add to keepers
+
+      missing: Show keepers you might want to remove
+  eos
+  puts help.gsub(/^( ){,4}/, '')
+else
+  raise "No such command #{cmd}"
+end
