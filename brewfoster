@@ -29,6 +29,7 @@ end
 def keepers
   keepers = Set.new
   Pathname.new('~/keepers').expand_path.each_child do |f|
+    next if /^\./.match(f.basename.to_s)
     f.each_line do |line|
       keepers << line.chomp.sub(/#.*/, '').strip
     end
