@@ -49,19 +49,37 @@ def orphans
   deps.keys
 end
 
+def candidates
+  nodeps = reverse_dependencies.select { |k,v| v.empty? }.keys
+  Set.new(nodeps) - keepers
+end
+
+def missing
+  keepers - dependencies.keys
+end
+
 cmd = ARGV.shift
 if cmd == 'orphans'
   orphans.sort.each { |o| puts o }
 elsif cmd == 'remove'
-  found = orphans
-  system('brew', 'remove', *found) unless found.empty?
+  system('brew', 'remove', *orphans) unless orphans.empty?
 elsif cmd == 'candidates'
-  nodeps = reverse_dependencies.select { |k,v| v.empty? }.keys
-  candidates = Set.new(nodeps) - keepers
   candidates.sort.each { |c| puts c }
 elsif cmd == 'missing'
-  missing = keepers - dependencies.keys
   missing.sort.each { |m| puts m }
+elsif cmd == 'diff'
+  cs, ms = candidates, missing
+  unless cs.empty?
+    puts 'Candidates'
+    cs.sort.each { |c| puts "  " + c }
+  end
+  unless ms.empty?
+    puts 'Missing'
+    ms.sort.each { |m| puts "  " + m }
+  end
+elsif cmd == 'restore'
+  system('brew', 'remove', *orphans) unless orphans.empty?
+  system('brew', 'install', *missing) unless missing.empty?
 elsif cmd.nil? || cmd == 'help'
   help = <<-eos
     Usage: brewfoster COMMAND
@@ -78,6 +96,10 @@ elsif cmd.nil? || cmd == 'help'
       candidates: Show packages you might want to add to keepers
 
       missing: Show keepers you might want to remove
+
+      diff: Show both candidates and missing
+
+      restore: Remove orphans, and install missing packages
   eos
   puts help.gsub(/^( ){,4}/, '')
 else
