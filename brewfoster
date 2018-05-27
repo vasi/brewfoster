@@ -34,7 +34,7 @@ def keepers
       keepers << line.chomp.sub(/#.*/, '').strip
     end
   end
-  keepers
+  keepers.select {|k| k.size > 0}
 end
 
 def orphans
